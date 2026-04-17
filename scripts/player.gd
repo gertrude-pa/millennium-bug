@@ -241,5 +241,11 @@ func apply_pickup(kind: int) -> void:
 		0: _pierce_ammo = PICKUP_PIERCE_SHOTS
 		1: _speed_boost_t = PICKUP_DURATION_SPEED
 		2: _spread_ammo = PICKUP_SPREAD_SHOTS
+		3:
+			if lives > 0 and lives < 3:
+				var restore_idx := lives
+				lives += 1
+				if game.has_method("on_life_restored"):
+					game.on_life_restored(self, restore_idx)
 	if game.has_method("on_pickup_collected"):
 		game.on_pickup_collected(self, kind)

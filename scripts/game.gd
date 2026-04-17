@@ -53,6 +53,7 @@ var _shake_amp := 0.0
 var _shake_dur := 0.0
 var _player_panels: Array = []
 var _camera: Camera2D
+var _match_gen := 0
 
 @onready var _players_root: Node2D = $Players
 @onready var _projectiles_root: Node2D = $Projectiles
@@ -175,6 +176,22 @@ func _build_hud() -> void:
 	panels_root.size = Vector2(1280, 62)
 	panels_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_hud.add_child(panels_root)
+
+	# Persistent control hint at the bottom.
+	var hint_bg := ColorRect.new()
+	hint_bg.color = Color(0, 0, 0, 0.55)
+	hint_bg.position = Vector2(0, 694)
+	hint_bg.size = Vector2(1280, 26)
+	_hud.add_child(hint_bg)
+	var hint := Label.new()
+	hint.name = "Hint"
+	hint.text = "[ESC] main menu    [R] restart match    ( pad: BACK = menu, START = restart )"
+	hint.add_theme_font_size_override("font_size", 13)
+	hint.add_theme_color_override("font_color", Color("ccff66", 0.9))
+	hint.position = Vector2(0, 697)
+	hint.size = Vector2(1280, 22)
+	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_hud.add_child(hint)
 
 	# Banner (round intro / winner).
 	var banner := Label.new()
@@ -318,6 +335,26 @@ func shake(amp: float, dur: float) -> void:
 		_shake_dur = dur
 		_shake_t = dur
 
+func _input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode == KEY_ESCAPE:
+			_to_title()
+		elif event.keycode == KEY_R:
+			_restart_match()
+	elif event is InputEventJoypadButton and event.pressed:
+		if event.button_index == JOY_BUTTON_BACK:
+			_to_title()
+		elif event.button_index == JOY_BUTTON_START:
+			_restart_match()
+
+func _to_title() -> void:
+	get_tree().change_scene_to_file("res://scenes/title.tscn")
+
+func _restart_match() -> void:
+	_match_gen += 1
+	_round_scores.clear()
+	_start_round()
+
 func _tick_shake(delta: float) -> void:
 	if _camera == null:
 		return
@@ -385,17 +422,21 @@ func _start_round() -> void:
 	_show_round_intro()
 
 func _show_round_intro() -> void:
+	var my_gen := _match_gen
 	_round_active = false
 	var banner: Label = _hud.get_node("Banner")
 	banner.visible = true
 	banner.modulate = Color.WHITE
 	banner.text = "CONNECTING...\n28800 bps"
 	await get_tree().create_timer(0.9).timeout
+	if my_gen != _match_gen: return
 	banner.text = "HANDSHAKE..."
 	await get_tree().create_timer(0.7).timeout
+	if my_gen != _match_gen: return
 	banner.text = "CONNECTED\n\nFIGHT!"
 	banner.modulate = Color("66ff33")
 	await get_tree().create_timer(0.9).timeout
+	if my_gen != _match_gen: return
 	banner.visible = false
 	_round_active = true
 	_update_hud()
@@ -410,6 +451,7 @@ func _spawn_position(i: int) -> Vector2:
 	return r.position + r.size * 0.5
 
 func _end_round(winner) -> void:
+	var my_gen := _match_gen
 	_round_active = false
 	if winner != null:
 		_round_scores[winner.device_id] = _round_scores.get(winner.device_id, 0) + 1
@@ -426,6 +468,7 @@ func _end_round(winner) -> void:
 		_screen_flash(Color("ff2222"), 0.9)
 		wait = 3.2
 	await get_tree().create_timer(wait).timeout
+	if my_gen != _match_gen: return
 	banner.visible = false
 
 	var match_winner = null
@@ -436,6 +479,7 @@ func _end_round(winner) -> void:
 	if match_winner != null:
 		_show_match_winner(match_winner)
 		await get_tree().create_timer(4.0).timeout
+		if my_gen != _match_gen: return
 		_round_scores.clear()
 	_start_round()
 
@@ -453,7 +497,16 @@ func _spawn_pickup() -> void:
 	if _pickups_root.get_child_count() >= 3:
 		return
 	var p = PICKUP_SCENE.instantiate()
-	p.kind = randi() % 3
+	# Weighted: CD 30%, MODEM 30%, FLOPPY_STACK 30%, HEART 10%.
+	var roll := randf()
+	if roll < 0.30:
+		p.kind = 0
+	elif roll < 0.60:
+		p.kind = 1
+	elif roll < 0.90:
+		p.kind = 2
+	else:
+		p.kind = 3
 	var r := arena_rect()
 	p.position = Vector2(
 		randf_range(r.position.x + 60, r.position.x + r.size.x - 60),
@@ -495,6 +548,15 @@ func on_player_died(p) -> void:
 
 func on_pickup_collected(_p, _kind: int) -> void:
 	pass
+
+func on_life_restored(p, icon_idx: int) -> void:
+	_update_hud()
+	if p.player_index < _player_panels.size():
+		var icons: Array = _player_panels[p.player_index]["life_icons"]
+		if icon_idx >= 0 and icon_idx < icons.size():
+			var icon = icons[icon_idx]
+			if is_instance_valid(icon):
+				icon.restore()
 
 func _spawn_death_popup(p) -> void:
 	var win := Control.new()

@@ -2,7 +2,7 @@ extends Area2D
 
 # Pickup: CD-ROM (pierce) or MODEM (speed boost).
 
-enum Kind { CD, MODEM, FLOPPY_STACK }
+enum Kind { CD, MODEM, FLOPPY_STACK, HEART }
 
 var kind: int = Kind.CD
 
@@ -22,6 +22,7 @@ func _ready() -> void:
 		Kind.CD: _label.text = "CD-ROM"
 		Kind.MODEM: _label.text = "56K"
 		Kind.FLOPPY_STACK: _label.text = "3.5\""
+		Kind.HEART: _label.text = "1-UP"
 	queue_redraw()
 
 func _process(delta: float) -> void:
@@ -51,6 +52,23 @@ func _draw() -> void:
 			draw_rect(Rect2(Vector2(-16, -16), Vector2(32, 32)), Color("333333"), true)
 			draw_rect(Rect2(Vector2(-10, -14), Vector2(20, 10)), Color("bbbbbb"), true)
 			draw_rect(Rect2(Vector2(-8, -12), Vector2(16, 6)), Color("000000"), true)
+		Kind.HEART:
+			# Pixel-art heart: two circles on top, inverted triangle below.
+			var pulse: float = 0.85 + sin(_t * 6.0) * 0.15
+			var red := Color(1.0, 0.2 * pulse, 0.3 * pulse)
+			draw_circle(Vector2(-6, -4), 8.0, red)
+			draw_circle(Vector2(6, -4), 8.0, red)
+			var tri := PackedVector2Array([
+				Vector2(-13, -1), Vector2(13, -1), Vector2(0, 14),
+			])
+			draw_colored_polygon(tri, red)
+			# White highlight for the chunky pixel look.
+			draw_circle(Vector2(-8, -7), 2.5, Color.WHITE)
+			# Outline.
+			draw_arc(Vector2(-6, -4), 8.0, -PI, 0, 16, Color.BLACK, 1.5)
+			draw_arc(Vector2(6, -4), 8.0, -PI, 0, 16, Color.BLACK, 1.5)
+			draw_line(Vector2(-13, -1), Vector2(0, 14), Color.BLACK, 1.5)
+			draw_line(Vector2(13, -1), Vector2(0, 14), Color.BLACK, 1.5)
 
 func _on_body(body: Node) -> void:
 	if not body.has_method("apply_pickup"):
