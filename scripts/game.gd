@@ -299,16 +299,18 @@ func _mark_panel_offline(player_idx: int) -> void:
 	if player_idx >= _player_panels.size():
 		return
 	var panel: Dictionary = _player_panels[player_idx]
-	panel["offline"].visible = true
-	panel["offline_label"].visible = true
-	panel["offline_label"].modulate.a = 0.0
-	var tw := panel["offline_label"].create_tween()
+	var offline_rect: ColorRect = panel["offline"]
+	var offline_label: Label = panel["offline_label"]
+	offline_rect.visible = true
+	offline_label.visible = true
+	offline_label.modulate.a = 0.0
+	var tw: Tween = offline_label.create_tween()
 	tw.set_loops(3)
-	tw.tween_property(panel["offline_label"], "modulate:a", 1.0, 0.18)
-	tw.tween_property(panel["offline_label"], "modulate:a", 0.25, 0.18)
-	var final_tw := panel["offline_label"].create_tween()
+	tw.tween_property(offline_label, "modulate:a", 1.0, 0.18)
+	tw.tween_property(offline_label, "modulate:a", 0.25, 0.18)
+	var final_tw: Tween = offline_label.create_tween()
 	final_tw.tween_interval(1.1)
-	final_tw.tween_property(panel["offline_label"], "modulate:a", 1.0, 0.2)
+	final_tw.tween_property(offline_label, "modulate:a", 1.0, 0.2)
 
 func shake(amp: float, dur: float) -> void:
 	if amp > _shake_amp * max(_shake_t, 0.001) / max(_shake_dur, 0.001):
