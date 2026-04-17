@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(where godot *)",
+      "Bash(where godot4 *)",
+      "Bash(where unity *)",
+      "Bash(where love *)",
+      "Bash(where node *)",
+      "Bash(where git *)",
+      "Bash(where gh *)",
+      "Bash(gh auth *)",
+      "Bash(git init *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(gh repo *)",
+      "Bash(git config *)",
+      "Bash(git push *)",
+      "Bash(git rm *)"
+    ]
+  }
+}

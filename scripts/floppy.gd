@@ -55,7 +55,7 @@ func _on_body(body: Node) -> void:
 		return
 	if body in _hit_bodies:
 		return
-	body.hit_by(owner_id)
+	body.hit_by(owner_id, direction)
 	_hit_bodies.append(body)
 	if not piercing:
 		queue_free()

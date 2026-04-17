@@ -48,6 +48,11 @@ var _bsod_timer := 0.0
 var _clippy_timer := 0.0
 var _marquee_x := 1280.0
 var _marquee_text := ""
+var _shake_t := 0.0
+var _shake_amp := 0.0
+var _shake_dur := 0.0
+var _player_panels: Array = []
+var _camera: Camera2D
 
 @onready var _players_root: Node2D = $Players
 @onready var _projectiles_root: Node2D = $Projectiles
@@ -62,6 +67,10 @@ func _ready() -> void:
 	add_child(_hazards_root)
 	_popups_root.layer = 5
 	add_child(_popups_root)
+	_camera = Camera2D.new()
+	_camera.enabled = true
+	_camera.position = Vector2(ARENA_SIZE.x * 0.5, ARENA_SIZE.y * 0.5)
+	add_child(_camera)
 	_draw_arena()
 	_build_hud()
 	_roll_marquee()
@@ -69,6 +78,7 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	_tick_marquee(delta)
+	_tick_shake(delta)
 	if not _round_active:
 		return
 	_round_time += delta
@@ -150,20 +160,21 @@ func _build_hud() -> void:
 	marq.add_theme_color_override("font_color", Color.BLACK)
 	_hud.add_child(marq)
 
-	# Score line below marquee.
-	var label := Label.new()
-	label.name = "Score"
-	label.position = Vector2(20, 30)
-	label.add_theme_font_size_override("font_size", 18)
-	_hud.add_child(label)
-
-	# Round countdown (center top-right).
+	# Clock at far right of marquee band.
 	var clock := Label.new()
 	clock.name = "Clock"
-	clock.position = Vector2(1080, 30)
-	clock.add_theme_font_size_override("font_size", 18)
-	clock.add_theme_color_override("font_color", Color("ffee00"))
+	clock.position = Vector2(1130, 2)
+	clock.add_theme_font_size_override("font_size", 16)
+	clock.add_theme_color_override("font_color", Color.BLACK)
 	_hud.add_child(clock)
+
+	# Container for per-player panels, populated per round.
+	var panels_root := Control.new()
+	panels_root.name = "Panels"
+	panels_root.position = Vector2(0, 28)
+	panels_root.size = Vector2(1280, 62)
+	panels_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_hud.add_child(panels_root)
 
 	# Banner (round intro / winner).
 	var banner := Label.new()
@@ -179,15 +190,141 @@ func _build_hud() -> void:
 	_hud.add_child(banner)
 
 func _update_hud() -> void:
-	var label: Label = _hud.get_node("Score")
-	var parts: Array[String] = []
-	for i in range(_players.size()):
-		var p = _players[i]
-		var s: int = _round_scores.get(p.device_id, 0)
-		parts.append("P%d  lives:%d  wins:%d" % [i + 1, p.lives, s])
-	label.text = "  |  ".join(parts)
 	var clock: Label = _hud.get_node("Clock")
 	clock.text = "11:59:%02d PM" % (int(_round_time * 2.0) % 60)
+	# Wins label per panel.
+	for i in range(_player_panels.size()):
+		var panel: Dictionary = _player_panels[i]
+		var p = _players[i]
+		var wins: int = _round_scores.get(p.device_id, 0)
+		panel["wins_label"].text = "WINS %d" % wins
+
+func _build_player_panels() -> void:
+	var panels_root: Control = _hud.get_node("Panels")
+	for c in panels_root.get_children():
+		c.queue_free()
+	_player_panels.clear()
+
+	var n := _players.size()
+	if n == 0:
+		return
+	var margin := 20.0
+	var gap := 12.0
+	var panel_w := (1280.0 - margin * 2.0 - gap * (n - 1)) / n
+	var panel_h := 56.0
+	for i in range(n):
+		var p = _players[i]
+		var px := margin + i * (panel_w + gap)
+
+		var panel := Control.new()
+		panel.position = Vector2(px, 0)
+		panel.size = Vector2(panel_w, panel_h)
+		panels_root.add_child(panel)
+
+		var bg := ColorRect.new()
+		bg.color = Color(p.color.r, p.color.g, p.color.b, 0.12)
+		bg.size = Vector2(panel_w, panel_h)
+		panel.add_child(bg)
+
+		# Color strip on the left.
+		var strip := ColorRect.new()
+		strip.color = p.color
+		strip.size = Vector2(4, panel_h)
+		panel.add_child(strip)
+
+		var name_label := Label.new()
+		name_label.text = "P%d" % (i + 1)
+		name_label.add_theme_font_size_override("font_size", 20)
+		name_label.add_theme_color_override("font_color", p.color)
+		name_label.position = Vector2(12, 2)
+		panel.add_child(name_label)
+
+		var wins_label := Label.new()
+		wins_label.text = "WINS 0"
+		wins_label.add_theme_font_size_override("font_size", 14)
+		wins_label.add_theme_color_override("font_color", Color.WHITE)
+		wins_label.position = Vector2(panel_w - 64, 4)
+		panel.add_child(wins_label)
+
+		# Life icons.
+		var life_icons: Array = []
+		var icon_start_x := 44.0
+		var icon_gap := 30.0
+		for j in range(LIVES_PER_ROUND):
+			var icon := Control.new()
+			icon.size = Vector2(24, 24)
+			icon.position = Vector2(icon_start_x + j * icon_gap, 26)
+			icon.set_script(preload("res://scripts/life_icon.gd"))
+			panel.add_child(icon)
+			icon.set_color(p.color)
+			life_icons.append(icon)
+
+		# Offline overlay, hidden until KO.
+		var offline := ColorRect.new()
+		offline.color = Color(0, 0, 0, 0.55)
+		offline.size = Vector2(panel_w, panel_h)
+		offline.visible = false
+		panel.add_child(offline)
+
+		var offline_label := Label.new()
+		offline_label.text = ">> OFFLINE <<"
+		offline_label.add_theme_font_size_override("font_size", 22)
+		offline_label.add_theme_color_override("font_color", Color("ff3344"))
+		offline_label.size = Vector2(panel_w, panel_h)
+		offline_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		offline_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		offline_label.visible = false
+		panel.add_child(offline_label)
+
+		_player_panels.append({
+			"root": panel,
+			"life_icons": life_icons,
+			"wins_label": wins_label,
+			"offline": offline,
+			"offline_label": offline_label,
+		})
+
+func _flash_life_icon(player_idx: int, icon_idx: int) -> void:
+	if player_idx >= _player_panels.size():
+		return
+	var icons: Array = _player_panels[player_idx]["life_icons"]
+	if icon_idx < 0 or icon_idx >= icons.size():
+		return
+	var icon = icons[icon_idx]
+	if not is_instance_valid(icon):
+		return
+	icon.break_it()
+
+func _mark_panel_offline(player_idx: int) -> void:
+	if player_idx >= _player_panels.size():
+		return
+	var panel: Dictionary = _player_panels[player_idx]
+	panel["offline"].visible = true
+	panel["offline_label"].visible = true
+	panel["offline_label"].modulate.a = 0.0
+	var tw := panel["offline_label"].create_tween()
+	tw.set_loops(3)
+	tw.tween_property(panel["offline_label"], "modulate:a", 1.0, 0.18)
+	tw.tween_property(panel["offline_label"], "modulate:a", 0.25, 0.18)
+	var final_tw := panel["offline_label"].create_tween()
+	final_tw.tween_interval(1.1)
+	final_tw.tween_property(panel["offline_label"], "modulate:a", 1.0, 0.2)
+
+func shake(amp: float, dur: float) -> void:
+	if amp > _shake_amp * max(_shake_t, 0.001) / max(_shake_dur, 0.001):
+		_shake_amp = amp
+		_shake_dur = dur
+		_shake_t = dur
+
+func _tick_shake(delta: float) -> void:
+	if _camera == null:
+		return
+	if _shake_t > 0.0:
+		_shake_t -= delta
+		var k: float = clamp(_shake_t / _shake_dur, 0.0, 1.0)
+		_camera.offset = Vector2(randf_range(-1, 1), randf_range(-1, 1)) * _shake_amp * k
+	else:
+		_camera.offset = Vector2.ZERO
 
 # ---------- Marquee ----------
 
@@ -241,6 +378,8 @@ func _start_round() -> void:
 	_pickup_timer = 3.0
 	_bsod_timer = 20.0
 	_clippy_timer = 5.0
+	_build_player_panels()
+	_update_hud()
 	_show_round_intro()
 
 func _show_round_intro() -> void:
@@ -342,11 +481,14 @@ func _spawn_clippy() -> void:
 
 # ---------- Callbacks from player ----------
 
-func on_player_damaged(_p) -> void:
+func on_player_damaged(p, idx_lost: int = -1) -> void:
 	_update_hud()
+	if idx_lost >= 0:
+		_flash_life_icon(p.player_index, idx_lost)
 
 func on_player_died(p) -> void:
 	_update_hud()
+	_mark_panel_offline(p.player_index)
 	_spawn_death_popup(p)
 
 func on_pickup_collected(_p, _kind: int) -> void:
