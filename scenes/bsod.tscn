@@ -7,7 +7,9 @@ script = ExtResource("1_bsod")
 collision_layer = 8
 collision_mask = 1
 
-[node name="Shape" type="CollisionShape2D" parent="."]
+[node name="ShapeTop" type="CollisionShape2D" parent="."]
+
+[node name="ShapeBot" type="CollisionShape2D" parent="."]
 
 [node name="Label" type="Label" parent="."]
 offset_left = -120.0

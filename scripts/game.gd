@@ -275,13 +275,16 @@ func _end_round(winner) -> void:
 	_update_hud()
 	var banner: Label = _hud.get_node("Banner")
 	banner.visible = true
+	var wait := 2.0
 	if winner != null:
 		banner.text = "ROUND: P%d" % (winner.player_index + 1)
 		banner.modulate = winner.color
 	else:
-		banner.text = "ROUND: DRAW"
-		banner.modulate = Color.WHITE
-	await get_tree().create_timer(2.0).timeout
+		banner.text = "!!! SYSTEM HALTED !!!\nNO SURVIVORS\n\n( round: mutual destruction )"
+		banner.modulate = Color("ff3344")
+		_screen_flash(Color("ff2222"), 0.9)
+		wait = 3.2
+	await get_tree().create_timer(wait).timeout
 	banner.visible = false
 
 	var match_winner = null
@@ -320,6 +323,17 @@ func _spawn_bsod() -> void:
 	var b = BSOD_SCENE.instantiate()
 	_hazards_root.add_child(b)
 	b.configure(arena_rect(), -1 if randi() % 2 == 0 else 1)
+
+func _screen_flash(color: Color, duration: float) -> void:
+	var flash := ColorRect.new()
+	flash.color = color
+	flash.anchor_right = 1.0
+	flash.anchor_bottom = 1.0
+	flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_popups_root.add_child(flash)
+	var tw := flash.create_tween()
+	tw.tween_property(flash, "modulate:a", 0.0, duration).from(0.9)
+	tw.tween_callback(flash.queue_free)
 
 func _spawn_clippy() -> void:
 	var c := Control.new()
