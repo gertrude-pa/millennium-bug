@@ -51,11 +51,13 @@ func _draw() -> void:
 	draw_rect(Rect2(Vector2(-4, 0), Vector2(8, 5)), color, true) # Label in player color.
 
 func _on_body(body: Node) -> void:
-	if not body.has_method("hit_by"):
-		return
 	if body in _hit_bodies:
 		return
-	body.hit_by(owner_id, direction)
-	_hit_bodies.append(body)
-	if not piercing:
+	if body.has_method("hit_by"):
+		body.hit_by(owner_id, direction)
+		_hit_bodies.append(body)
+		if not piercing:
+			queue_free()
+	else:
+		# Hit an obstacle / other static body: disk breaks.
 		queue_free()

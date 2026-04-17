@@ -38,6 +38,7 @@ func _input(event: InputEvent) -> void:
 
 func _boot() -> void:
 	set_process_input(false)
+	Sfx.play_title_boot()
 	get_tree().change_scene_to_file("res://scenes/main.tscn")
 
 func _process(delta: float) -> void:

@@ -54,11 +54,14 @@ var _shake_dur := 0.0
 var _player_panels: Array = []
 var _camera: Camera2D
 var _match_gen := 0
+var _in_hitstop := false
+var _bsod_warning_active := false
 
 @onready var _players_root: Node2D = $Players
 @onready var _projectiles_root: Node2D = $Projectiles
 @onready var _pickups_root: Node2D = Node2D.new()
 @onready var _hazards_root: Node2D = Node2D.new()
+@onready var _obstacles_root: Node2D = Node2D.new()
 @onready var _popups_root: CanvasLayer = CanvasLayer.new()
 @onready var _hud: CanvasLayer = $HUD
 
@@ -66,6 +69,7 @@ func _ready() -> void:
 	randomize()
 	add_child(_pickups_root)
 	add_child(_hazards_root)
+	add_child(_obstacles_root)
 	_popups_root.layer = 5
 	add_child(_popups_root)
 	_camera = Camera2D.new()
@@ -348,9 +352,13 @@ func _input(event: InputEvent) -> void:
 			_restart_match()
 
 func _to_title() -> void:
+	Engine.time_scale = 1.0
+	_in_hitstop = false
 	get_tree().change_scene_to_file("res://scenes/title.tscn")
 
 func _restart_match() -> void:
+	Engine.time_scale = 1.0
+	_in_hitstop = false
 	_match_gen += 1
 	_round_scores.clear()
 	_start_round()
@@ -395,6 +403,9 @@ func _start_round() -> void:
 		c.queue_free()
 	for c in _hazards_root.get_children():
 		c.queue_free()
+	for c in _obstacles_root.get_children():
+		c.queue_free()
+	_spawn_obstacles()
 
 	var connected := Input.get_connected_joypads()
 	if connected.is_empty():
@@ -435,6 +446,7 @@ func _show_round_intro() -> void:
 	if my_gen != _match_gen: return
 	banner.text = "CONNECTED\n\nFIGHT!"
 	banner.modulate = Color("66ff33")
+	Sfx.play_round_start()
 	await get_tree().create_timer(0.9).timeout
 	if my_gen != _match_gen: return
 	banner.visible = false
@@ -462,6 +474,7 @@ func _end_round(winner) -> void:
 	if winner != null:
 		banner.text = "ROUND: P%d" % (winner.player_index + 1)
 		banner.modulate = winner.color
+		Sfx.play_round_end()
 	else:
 		banner.text = "!!! SYSTEM HALTED !!!\nNO SURVIVORS\n\n( round: mutual destruction )"
 		banner.modulate = Color("ff3344")
@@ -488,6 +501,7 @@ func _show_match_winner(p) -> void:
 	banner.text = "P%d WINS\nY2K SURVIVED" % (p.player_index + 1)
 	banner.modulate = p.color
 	banner.visible = true
+	Sfx.play_match_win()
 	await get_tree().create_timer(3.5).timeout
 	banner.visible = false
 
@@ -514,9 +528,166 @@ func _spawn_pickup() -> void:
 	_pickups_root.add_child(p)
 
 func _spawn_bsod() -> void:
+	_warn_then_spawn_bsod()
+
+func _warn_then_spawn_bsod() -> void:
+	if _bsod_warning_active:
+		return
+	_bsod_warning_active = true
+	var my_gen := _match_gen
+	var warn := _make_bsod_warning()
+	_popups_root.add_child(warn)
+	for i in range(3):
+		Sfx.play_bsod_warn()
+		await get_tree().create_timer(0.35).timeout
+		if my_gen != _match_gen:
+			_bsod_warning_active = false
+			if is_instance_valid(warn):
+				warn.queue_free()
+			return
+	if is_instance_valid(warn):
+		warn.queue_free()
+	_bsod_warning_active = false
 	var b = BSOD_SCENE.instantiate()
 	_hazards_root.add_child(b)
 	b.configure(arena_rect(), -1 if randi() % 2 == 0 else 1)
+	Sfx.play_bsod_spawn()
+	shake(6.0, 0.25)
+
+func _make_bsod_warning() -> Control:
+	var warn := Control.new()
+	warn.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	warn.size = Vector2(ARENA_SIZE.x, ARENA_SIZE.y)
+	var thickness := 22.0
+	var red := Color("ff2233")
+	for spec in [
+		[0.0, 0.0, ARENA_SIZE.x, thickness],
+		[0.0, ARENA_SIZE.y - thickness, ARENA_SIZE.x, thickness],
+		[0.0, 0.0, thickness, ARENA_SIZE.y],
+		[ARENA_SIZE.x - thickness, 0.0, thickness, ARENA_SIZE.y],
+	]:
+		var edge := ColorRect.new()
+		edge.color = red
+		edge.position = Vector2(spec[0], spec[1])
+		edge.size = Vector2(spec[2], spec[3])
+		warn.add_child(edge)
+	var label := Label.new()
+	label.text = "! ! !   BLUE SCREEN INCOMING   ! ! !"
+	label.add_theme_font_size_override("font_size", 38)
+	label.add_theme_color_override("font_color", Color("ffeeaa"))
+	label.add_theme_color_override("font_shadow_color", Color("ff2233"))
+	label.add_theme_constant_override("shadow_offset_x", 3)
+	label.add_theme_constant_override("shadow_offset_y", 3)
+	label.position = Vector2(0, 130)
+	label.size = Vector2(ARENA_SIZE.x, 60)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	warn.add_child(label)
+	warn.modulate.a = 0.0
+	var tw: Tween = warn.create_tween()
+	tw.set_loops(3)
+	tw.tween_property(warn, "modulate:a", 1.0, 0.17)
+	tw.tween_property(warn, "modulate:a", 0.1, 0.18)
+	return warn
+
+# ---------- Obstacles ----------
+
+func _spawn_obstacles() -> void:
+	var layouts := [
+		# Four corners-ish rectangles.
+		[[0.25, 0.35, 70.0, 60.0], [0.75, 0.35, 70.0, 60.0],
+		 [0.25, 0.65, 70.0, 60.0], [0.75, 0.65, 70.0, 60.0]],
+		# Cross: central bar + two pillars.
+		[[0.5, 0.5, 160.0, 34.0], [0.5, 0.22, 34.0, 80.0], [0.5, 0.78, 34.0, 80.0]],
+		# Two vertical walls splitting the arena into three lanes.
+		[[0.33, 0.5, 34.0, 220.0], [0.67, 0.5, 34.0, 220.0]],
+		# H-shape.
+		[[0.3, 0.5, 34.0, 220.0], [0.7, 0.5, 34.0, 220.0], [0.5, 0.5, 120.0, 30.0]],
+	]
+	var layout: Array = layouts[randi() % layouts.size()]
+	var r := arena_rect()
+	for spec in layout:
+		var obs := _make_obstacle(spec[2], spec[3])
+		obs.position = Vector2(
+			r.position.x + r.size.x * spec[0],
+			r.position.y + r.size.y * spec[1])
+		_obstacles_root.add_child(obs)
+
+func _make_obstacle(w: float, h: float) -> StaticBody2D:
+	var body := StaticBody2D.new()
+	body.collision_layer = 1
+	body.collision_mask = 0
+	var shape := CollisionShape2D.new()
+	var rect_shape := RectangleShape2D.new()
+	rect_shape.size = Vector2(w, h)
+	shape.shape = rect_shape
+	body.add_child(shape)
+	# Beige PC tower body.
+	var fill := ColorRect.new()
+	fill.color = Color("c8c0a8")
+	fill.size = Vector2(w, h)
+	fill.position = Vector2(-w * 0.5, -h * 0.5)
+	body.add_child(fill)
+	# Dark border.
+	var border_col := Color("3a2f22")
+	var b_top := ColorRect.new()
+	b_top.color = border_col
+	b_top.size = Vector2(w, 2)
+	b_top.position = Vector2(-w * 0.5, -h * 0.5)
+	body.add_child(b_top)
+	var b_bot := ColorRect.new()
+	b_bot.color = border_col
+	b_bot.size = Vector2(w, 2)
+	b_bot.position = Vector2(-w * 0.5, h * 0.5 - 2)
+	body.add_child(b_bot)
+	var b_left := ColorRect.new()
+	b_left.color = border_col
+	b_left.size = Vector2(2, h)
+	b_left.position = Vector2(-w * 0.5, -h * 0.5)
+	body.add_child(b_left)
+	var b_right := ColorRect.new()
+	b_right.color = border_col
+	b_right.size = Vector2(2, h)
+	b_right.position = Vector2(w * 0.5 - 2, -h * 0.5)
+	body.add_child(b_right)
+	# Floppy slot.
+	var slot_w: float = min(w * 0.6, 44.0)
+	var slot := ColorRect.new()
+	slot.color = Color("111111")
+	slot.size = Vector2(slot_w, 3)
+	slot.position = Vector2(-slot_w * 0.5, -h * 0.5 + 8)
+	body.add_child(slot)
+	# Green power LED.
+	var led := ColorRect.new()
+	led.color = Color("33ff33")
+	led.size = Vector2(3, 3)
+	led.position = Vector2(w * 0.5 - 10, -h * 0.5 + 8)
+	body.add_child(led)
+	# Cyan logo strip.
+	var logo_w: float = min(w * 0.5, 40.0)
+	var logo := ColorRect.new()
+	logo.color = Color("00ccff")
+	logo.size = Vector2(logo_w, 2)
+	logo.position = Vector2(-logo_w * 0.5, 0)
+	body.add_child(logo)
+	# CD-ROM tray line.
+	if h > 80:
+		var tray := ColorRect.new()
+		tray.color = Color("222222")
+		tray.size = Vector2(w * 0.7, 2)
+		tray.position = Vector2(-w * 0.35, h * 0.5 - 14)
+		body.add_child(tray)
+	return body
+
+# ---------- Hitstop ----------
+
+func hitstop(duration: float) -> void:
+	if _in_hitstop:
+		return
+	_in_hitstop = true
+	Engine.time_scale = 0.05
+	await get_tree().create_timer(duration, true, false, true).timeout
+	Engine.time_scale = 1.0
+	_in_hitstop = false
 
 func _screen_flash(color: Color, duration: float) -> void:
 	var flash := ColorRect.new()

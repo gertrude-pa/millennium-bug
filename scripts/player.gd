@@ -146,6 +146,7 @@ func _spawn_floppy(dir: Vector2, piercing: bool) -> void:
 	proj.color = color
 	proj.piercing = piercing
 	game.spawn_projectile(proj)
+	Sfx.play_throw()
 
 func _clamp_to_arena() -> void:
 	var r: Rect2 = game.arena_rect()
@@ -172,8 +173,11 @@ func _take_damage(hit_dir: Vector2) -> void:
 	if lives <= 0:
 		_die()
 	else:
+		Sfx.play_hit()
 		if game.has_method("shake"):
 			game.shake(4.0, 0.15)
+		if game.has_method("hitstop"):
+			game.hitstop(0.06)
 	if game.has_method("on_player_damaged"):
 		game.on_player_damaged(self, idx_lost)
 
@@ -182,8 +186,11 @@ func _die() -> void:
 	visible = false
 	set_physics_process(false)
 	$Shape.set_deferred("disabled", true)
+	Sfx.play_death()
 	if game.has_method("shake"):
 		game.shake(10.0, 0.35)
+	if game.has_method("hitstop"):
+		game.hitstop(0.14)
 	if game.has_method("on_player_died"):
 		game.on_player_died(self)
 
@@ -247,5 +254,6 @@ func apply_pickup(kind: int) -> void:
 				lives += 1
 				if game.has_method("on_life_restored"):
 					game.on_life_restored(self, restore_idx)
+	Sfx.play_pickup(kind)
 	if game.has_method("on_pickup_collected"):
 		game.on_pickup_collected(self, kind)
