@@ -1,0 +1,26 @@
+# Godot 4+
+.godot/
+.import/
+export.cfg
+export_presets.cfg
+
+# Binaries / exports
+*.exe
+*.pck
+*.zip
+build/
+dist/
+
+# Editor / OS
+.vscode/
+.idea/
+*.swp
+*.tmp
+Thumbs.db
+.DS_Store
+
+# Credentials (shouldn't exist, but paranoia)
+*.pem
+*.key
+.env
+.env.*

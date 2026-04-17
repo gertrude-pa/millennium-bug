@@ -1,0 +1,31 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/game.gd" id="1_game"]
+[ext_resource type="Shader" path="res://shaders/crt.gdshader" id="2_crt"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_crt"]
+shader = ExtResource("2_crt")
+shader_parameter/scanline_strength = 0.25
+shader_parameter/curvature = 0.06
+shader_parameter/chromatic = 0.0018
+shader_parameter/vignette = 0.35
+
+[node name="Main" type="Node2D"]
+script = ExtResource("1_game")
+
+[node name="Arena" type="Node2D" parent="."]
+
+[node name="Players" type="Node2D" parent="."]
+
+[node name="Projectiles" type="Node2D" parent="."]
+
+[node name="HUD" type="CanvasLayer" parent="."]
+
+[node name="CRT" type="CanvasLayer" parent="."]
+layer = 10
+
+[node name="ColorRect" type="ColorRect" parent="CRT"]
+material = SubResource("ShaderMaterial_crt")
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2

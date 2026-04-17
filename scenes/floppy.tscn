@@ -1,0 +1,14 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/floppy.gd" id="1_floppy"]
+
+[node name="Floppy" type="Area2D"]
+script = ExtResource("1_floppy")
+collision_layer = 2
+collision_mask = 1
+
+[node name="Sprite" type="Polygon2D" parent="."]
+polygon = PackedVector2Array(-7, -7, 7, -7, 7, 7, -7, 7)
+color = Color(1, 1, 1, 1)
+
+[node name="Shape" type="CollisionShape2D" parent="."]
