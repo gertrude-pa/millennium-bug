@@ -12,10 +12,6 @@ config_version=5
 
 compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 
-[autoload]
-
-Sfx="*res://scripts/sfx.gd"
-
 [application]
 
 config/name="Millennium Bug"
@@ -23,6 +19,10 @@ config/description="Y2K arena brawler — 4-player local, Xbox 360 pads."
 run/main_scene="res://scenes/title.tscn"
 config/features=PackedStringArray("4.6", "Forward Plus")
 config/icon="res://icon.svg"
+
+[autoload]
+
+Sfx="*res://scripts/sfx.gd"
 
 [display]
 

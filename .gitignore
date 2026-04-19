@@ -3,7 +3,6 @@
 .import/
 *.import
 export.cfg
-export_presets.cfg
 
 # Claude Code local settings
 .claude/
